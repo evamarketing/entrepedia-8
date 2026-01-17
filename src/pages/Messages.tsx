@@ -1,16 +1,23 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Send, MessageCircle, ArrowLeft, Circle } from 'lucide-react';
+import { Send, MessageCircle, ArrowLeft, Circle, Plus, Search, UserPlus } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -38,19 +45,33 @@ interface Message {
   is_read: boolean | null;
 }
 
+interface FollowedUser {
+  id: string;
+  full_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
+  is_online: boolean | null;
+}
+
 export default function Messages() {
   const { conversationId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  
+
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+
+  // New chat dialog state
+  const [newChatOpen, setNewChatOpen] = useState(false);
+  const [followedUsers, setFollowedUsers] = useState<FollowedUser[]>([]);
+  const [followedLoading, setFollowedLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     if (!user) {
@@ -61,7 +82,7 @@ export default function Messages() {
   }, [user]);
 
   useEffect(() => {
-    if (conversationId) {
+    if (conversationId && conversations.length > 0) {
       loadConversation(conversationId);
     }
   }, [conversationId, conversations]);
@@ -100,6 +121,49 @@ export default function Messages() {
       supabase.removeChannel(channel);
     };
   }, [selectedConversation, user]);
+
+  // Fetch people you follow when opening the New Chat dialog
+  const fetchFollowedUsers = useCallback(async () => {
+    if (!user) return;
+    
+    setFollowedLoading(true);
+    try {
+      // Get list of users this person follows
+      const { data: followData, error: followError } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', user.id);
+
+      if (followError) throw followError;
+
+      if (!followData || followData.length === 0) {
+        setFollowedUsers([]);
+        return;
+      }
+
+      const followingIds = followData.map(f => f.following_id).filter(Boolean) as string[];
+
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, full_name, username, avatar_url, is_online')
+        .in('id', followingIds);
+
+      if (profileError) throw profileError;
+
+      setFollowedUsers(profiles || []);
+    } catch (error) {
+      console.error('Error fetching followed users:', error);
+      toast({ title: 'Error loading contacts', variant: 'destructive' });
+    } finally {
+      setFollowedLoading(false);
+    }
+  }, [user, toast]);
+
+  useEffect(() => {
+    if (newChatOpen) {
+      fetchFollowedUsers();
+    }
+  }, [newChatOpen, fetchFollowedUsers]);
 
   const fetchConversations = async () => {
     if (!user) return;
@@ -225,7 +289,7 @@ export default function Messages() {
         .eq('id', selectedConversation.id);
 
       setNewMessage('');
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({ title: 'Error sending message', variant: 'destructive' });
     } finally {
       setSending(false);
@@ -240,6 +304,36 @@ export default function Messages() {
     setSelectedConversation(conv);
     navigate(`/messages/${conv.id}`);
   };
+
+  // Start a new conversation with a followed user
+  const startNewChat = async (otherUserId: string) => {
+    if (!user) return;
+
+    try {
+      const { data: conversationId, error } = await supabase
+        .rpc('get_or_create_conversation', { other_user_id: otherUserId });
+
+      if (error) throw error;
+
+      if (conversationId) {
+        setNewChatOpen(false);
+        await fetchConversations();
+        navigate(`/messages/${conversationId}`);
+      }
+    } catch (error) {
+      console.error('Error starting conversation:', error);
+      toast({ title: 'Error starting chat', variant: 'destructive' });
+    }
+  };
+
+  // Filter followed users based on search
+  const filteredFollowedUsers = followedUsers.filter(u => {
+    const term = searchTerm.toLowerCase();
+    return (
+      u.full_name?.toLowerCase().includes(term) ||
+      u.username?.toLowerCase().includes(term)
+    );
+  });
 
   if (loading) {
     return (
@@ -261,8 +355,81 @@ export default function Messages() {
               "border-r border-border",
               selectedConversation && "hidden md:block"
             )}>
-              <CardHeader className="py-4 border-b">
+              <CardHeader className="py-4 border-b flex flex-row items-center justify-between">
                 <CardTitle className="text-lg">Messages</CardTitle>
+                <Dialog open={newChatOpen} onOpenChange={setNewChatOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="icon" variant="ghost" aria-label="New chat">
+                      <Plus className="h-5 w-5" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Start a New Chat</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 pt-2">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search people you follow..."
+                          className="pl-10"
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                      </div>
+                      <ScrollArea className="h-[300px]">
+                        {followedLoading ? (
+                          <div className="space-y-3 p-2">
+                            {Array.from({ length: 4 }).map((_, i) => (
+                              <Skeleton key={i} className="h-14 w-full rounded-lg" />
+                            ))}
+                          </div>
+                        ) : filteredFollowedUsers.length === 0 ? (
+                          <div className="p-8 text-center">
+                            <UserPlus className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+                            <p className="text-muted-foreground text-sm">
+                              {followedUsers.length === 0
+                                ? "You're not following anyone yet."
+                                : "No matches found."}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            {filteredFollowedUsers.map((u) => (
+                              <div
+                                key={u.id}
+                                className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                                onClick={() => startNewChat(u.id)}
+                              >
+                                <div className="relative">
+                                  <Avatar className="h-10 w-10">
+                                    <AvatarImage src={u.avatar_url || ''} />
+                                    <AvatarFallback className="gradient-primary text-white">
+                                      {u.full_name?.charAt(0) || 'U'}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  {u.is_online && (
+                                    <Circle className="absolute bottom-0 right-0 h-2.5 w-2.5 fill-green-500 text-green-500" />
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-foreground truncate">
+                                    {u.full_name || 'Unknown'}
+                                  </p>
+                                  {u.username && (
+                                    <p className="text-xs text-muted-foreground truncate">
+                                      @{u.username}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </ScrollArea>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </CardHeader>
               <ScrollArea className="h-[calc(600px-60px)]">
                 {conversations.length > 0 ? (
@@ -306,7 +473,15 @@ export default function Messages() {
                 ) : (
                   <div className="p-8 text-center">
                     <MessageCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">No conversations yet</p>
+                    <p className="text-muted-foreground mb-3">No conversations yet</p>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setNewChatOpen(true)}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Start a Chat
+                    </Button>
                   </div>
                 )}
               </ScrollArea>
@@ -408,7 +583,14 @@ export default function Messages() {
                 <div className="flex-1 flex items-center justify-center">
                   <div className="text-center">
                     <MessageCircle className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">Select a conversation to start chatting</p>
+                    <p className="text-muted-foreground mb-4">Select a conversation to start chatting</p>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setNewChatOpen(true)}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Start a New Chat
+                    </Button>
                   </div>
                 </div>
               )}
