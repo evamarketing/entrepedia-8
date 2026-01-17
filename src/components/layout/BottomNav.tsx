@@ -3,11 +3,13 @@ import { Home, Compass, PlusSquare, Users, User } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 
+import { Building2 } from 'lucide-react';
+
 const navItems = [
   { icon: Home, label: 'Home', path: '/' },
-  { icon: Compass, label: 'Explore', path: '/explore' },
+  { icon: Building2, label: 'Business', path: '/my-businesses' },
   { icon: PlusSquare, label: 'Create', path: '/create' },
-  { icon: Users, label: 'Communities', path: '/communities' },
+  { icon: Users, label: 'Community', path: '/communities' },
   { icon: User, label: 'Profile', path: '/profile' },
 ];
 

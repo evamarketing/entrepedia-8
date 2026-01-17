@@ -39,44 +39,47 @@ export default function Create() {
       <div className="container max-w-2xl py-8 space-y-6">
         <h1 className="text-2xl font-bold">Create</h1>
 
-        {/* Create Post */}
-        <CreatePostCard onPostCreated={handlePostCreated} />
-
-        {/* Quick Actions */}
+        {/* Priority: Business & Community */}
         <div className="grid gap-4 sm:grid-cols-2">
           <Card 
-            className="cursor-pointer hover:bg-accent/50 transition-colors"
-            onClick={() => navigate('/communities')}
-          >
-            <CardHeader className="flex flex-row items-center gap-4 pb-2">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Users className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <CardTitle className="text-base">Create Community</CardTitle>
-                <CardDescription className="text-sm">
-                  Start a new community
-                </CardDescription>
-              </div>
-            </CardHeader>
-          </Card>
-
-          <Card 
-            className="cursor-pointer hover:bg-accent/50 transition-colors"
+            className="cursor-pointer hover:bg-accent/50 transition-colors border-2 border-primary/20"
             onClick={() => navigate('/my-businesses')}
           >
             <CardHeader className="flex flex-row items-center gap-4 pb-2">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Store className="h-6 w-6 text-primary" />
+              <div className="p-3 bg-primary/10 rounded-lg">
+                <Store className="h-8 w-8 text-primary" />
               </div>
               <div>
-                <CardTitle className="text-base">Create Business</CardTitle>
+                <CardTitle className="text-lg">Create Business</CardTitle>
                 <CardDescription className="text-sm">
-                  Add your business profile
+                  Publish your business profile or idea
                 </CardDescription>
               </div>
             </CardHeader>
           </Card>
+
+          <Card 
+            className="cursor-pointer hover:bg-accent/50 transition-colors border-2 border-primary/20"
+            onClick={() => navigate('/communities')}
+          >
+            <CardHeader className="flex flex-row items-center gap-4 pb-2">
+              <div className="p-3 bg-primary/10 rounded-lg">
+                <Users className="h-8 w-8 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">Create Community</CardTitle>
+                <CardDescription className="text-sm">
+                  Start a business idea community
+                </CardDescription>
+              </div>
+            </CardHeader>
+          </Card>
+        </div>
+
+        {/* Secondary: Create Post */}
+        <div className="pt-4">
+          <h2 className="text-lg font-semibold mb-4 text-muted-foreground">Or share an update</h2>
+          <CreatePostCard onPostCreated={handlePostCreated} />
         </div>
       </div>
     </MainLayout>
