@@ -62,6 +62,8 @@ export default function MyBusinesses() {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingBusiness, setEditingBusiness] = useState<Business | null>(null);
   const [saving, setSaving] = useState(false);
   
   // Form state
@@ -156,6 +158,47 @@ export default function MyBusinesses() {
       fetchBusinesses();
     } catch (error: any) {
       toast({ title: 'Error deleting business', description: error.message, variant: 'destructive' });
+    }
+  };
+
+  const handleEditBusiness = (business: Business) => {
+    setEditingBusiness(business);
+    setName(business.name);
+    setDescription(business.description || '');
+    setCategory(business.category);
+    setLocation(business.location || '');
+    setEditDialogOpen(true);
+  };
+
+  const handleUpdateBusiness = async () => {
+    if (!user || !editingBusiness || !name.trim()) {
+      toast({ title: 'Please enter a business name', variant: 'destructive' });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('businesses')
+        .update({
+          name: name.trim(),
+          description: description.trim() || null,
+          category,
+          location: location.trim() || null,
+        })
+        .eq('id', editingBusiness.id);
+
+      if (error) throw error;
+
+      toast({ title: 'Business updated successfully!' });
+      setEditDialogOpen(false);
+      setEditingBusiness(null);
+      resetForm();
+      fetchBusinesses();
+    } catch (error: any) {
+      toast({ title: 'Error updating business', description: error.message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -316,7 +359,7 @@ export default function MyBusinesses() {
                         variant="secondary"
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigate(`/my-businesses/${business.id}/edit`);
+                          handleEditBusiness(business);
                         }}
                       >
                         <Edit className="h-4 w-4" />
@@ -355,6 +398,77 @@ export default function MyBusinesses() {
             </CardContent>
           </Card>
         )}
+
+        {/* Edit Business Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={(open) => {
+          setEditDialogOpen(open);
+          if (!open) {
+            setEditingBusiness(null);
+            resetForm();
+          }
+        }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Edit Business</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-name">Business Name *</Label>
+                <Input
+                  id="edit-name"
+                  placeholder="Enter business name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="edit-description">Description</Label>
+                <Textarea
+                  id="edit-description"
+                  placeholder="Describe your business..."
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="edit-category">Category</Label>
+                <Select value={category} onValueChange={(val) => setCategory(val as BusinessCategory)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map((cat) => (
+                      <SelectItem key={cat.value} value={cat.value}>
+                        {cat.icon} {cat.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="edit-location">Location</Label>
+                <Input
+                  id="edit-location"
+                  placeholder="e.g., Kerala, India"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                />
+              </div>
+              
+              <Button 
+                onClick={handleUpdateBusiness} 
+                className="w-full gradient-primary text-white"
+                disabled={saving}
+              >
+                {saving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </MainLayout>
   );
