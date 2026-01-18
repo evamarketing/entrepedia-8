@@ -11,7 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Camera, Save, LogOut } from 'lucide-react';
+import { Camera, Save, LogOut, MapPin, Loader2 } from 'lucide-react';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -25,6 +25,7 @@ export default function Settings() {
   const [location, setLocation] = useState(profile?.location || '');
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [fetchingLocation, setFetchingLocation] = useState(false);
 
   if (!user) {
     navigate('/auth');
@@ -96,6 +97,67 @@ export default function Settings() {
   const handleSignOut = async () => {
     await signOut();
     navigate('/');
+  };
+
+  const handleGetCurrentLocation = async () => {
+    if (!navigator.geolocation) {
+      toast({ 
+        title: 'Geolocation not supported', 
+        description: 'Your browser does not support location services',
+        variant: 'destructive' 
+      });
+      return;
+    }
+
+    setFetchingLocation(true);
+    
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        
+        try {
+          // Use free reverse geocoding service (Nominatim/OpenStreetMap)
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`
+          );
+          const data = await response.json();
+          
+          // Extract city/town and country from the response
+          const city = data.address?.city || data.address?.town || data.address?.village || data.address?.state;
+          const country = data.address?.country;
+          
+          const locationString = [city, country].filter(Boolean).join(', ');
+          setLocation(locationString || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+          
+          toast({ title: 'Location fetched!', description: locationString });
+        } catch (error) {
+          // Fallback to coordinates if reverse geocoding fails
+          setLocation(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+          toast({ title: 'Location coordinates saved' });
+        } finally {
+          setFetchingLocation(false);
+        }
+      },
+      (error) => {
+        setFetchingLocation(false);
+        let message = 'Unable to get your location';
+        
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            message = 'Please allow location access in your browser settings';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            message = 'Location information is unavailable';
+            break;
+          case error.TIMEOUT:
+            message = 'Location request timed out';
+            break;
+        }
+        
+        toast({ title: 'Location error', description: message, variant: 'destructive' });
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
   };
 
   return (
@@ -179,12 +241,34 @@ export default function Settings() {
 
               <div className="space-y-2">
                 <Label htmlFor="location">Location</Label>
-                <Input
-                  id="location"
-                  placeholder="e.g., Kerala, India"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="location"
+                    placeholder="e.g., Kerala, India"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleGetCurrentLocation}
+                    disabled={fetchingLocation}
+                    className="shrink-0"
+                  >
+                    {fetchingLocation ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <MapPin className="h-4 w-4" />
+                    )}
+                    <span className="ml-2 hidden sm:inline">
+                      {fetchingLocation ? 'Getting...' : 'Current'}
+                    </span>
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Click the button to use your device's GPS location
+                </p>
               </div>
             </div>
 
