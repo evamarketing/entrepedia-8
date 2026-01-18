@@ -164,6 +164,15 @@ export function Navbar() {
                       <Settings className="mr-2 h-4 w-4" />
                       Settings
                     </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => {
+                      const appUrl = window.location.origin;
+                      const message = `🚀 Check out സംരംഭക.com - a platform for entrepreneurs to connect, share ideas and grow together! Join now: ${appUrl}`;
+                      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+                      window.open(whatsappUrl, '_blank');
+                    }}>
+                      <Share2 className="mr-2 h-4 w-4" />
+                      Invite Friends
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={signOut} className="text-destructive">
                       <LogOut className="mr-2 h-4 w-4" />
