@@ -8,10 +8,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Camera, Save, LogOut } from 'lucide-react';
+import { Camera, Save, LogOut, Mail, CheckCircle, AlertCircle } from 'lucide-react';
 import { PanchayathLocationPicker } from '@/components/settings/PanchayathLocationPicker';
 
 export default function Settings() {
@@ -199,6 +200,67 @@ export default function Settings() {
           </CardContent>
         </Card>
 
+        {/* Email Verification for Verified Profile */}
+        <Card className="border-0 shadow-soft">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              Email Verification
+              {user.email && !user.email.includes('@phone.local') ? (
+                <Badge variant="default" className="bg-green-500">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  Verified
+                </Badge>
+              ) : (
+                <Badge variant="secondary">
+                  <AlertCircle className="h-3 w-3 mr-1" />
+                  Not Verified
+                </Badge>
+              )}
+            </CardTitle>
+            <CardDescription>
+              Add a verified email to get a verified profile badge
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-3">
+              <Mail className="h-5 w-5 text-muted-foreground" />
+              <div className="flex-1">
+                <p className="font-medium text-foreground">
+                  {user.email && !user.email.includes('@phone.local') 
+                    ? user.email 
+                    : 'No email added'}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {user.email && !user.email.includes('@phone.local')
+                    ? 'Your profile is verified'
+                    : 'Add your email for profile verification'}
+                </p>
+              </div>
+            </div>
+
+            {(!user.email || user.email.includes('@phone.local')) && (
+              <div className="p-4 rounded-lg bg-muted/50 space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  A verified email helps build trust with other users and unlocks additional features.
+                </p>
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={() => {
+                    toast({
+                      title: 'Coming Soon',
+                      description: 'Email verification feature will be available soon!'
+                    });
+                  }}
+                >
+                  <Mail className="mr-2 h-4 w-4" />
+                  Add Email for Verification
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Account Settings */}
         <Card className="border-0 shadow-soft">
           <CardHeader>
@@ -208,8 +270,12 @@ export default function Settings() {
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-medium text-foreground">Email</p>
-                <p className="text-sm text-muted-foreground">{user.email}</p>
+                <p className="font-medium text-foreground">Login Credential</p>
+                <p className="text-sm text-muted-foreground">
+                  {user.email?.includes('@phone.local') 
+                    ? user.email.replace('@phone.local', '') + ' (Mobile)'
+                    : user.email}
+                </p>
               </div>
             </div>
 
