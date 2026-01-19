@@ -50,6 +50,14 @@ export default function Settings() {
   const [showLocation, setShowLocation] = useState(profile?.show_location ?? true);
   const [savingPrivacy, setSavingPrivacy] = useState(false);
 
+  // Check for unsaved profile changes
+  const hasUnsavedProfileChanges = profile && (
+    fullName !== (profile.full_name || '') ||
+    username !== (profile.username || '') ||
+    bio !== (profile.bio || '') ||
+    location !== (profile.location || '')
+  );
+
   useEffect(() => {
     if (profile) {
       setFullName(profile.full_name || '');
@@ -505,12 +513,15 @@ export default function Settings() {
 
             <Button 
               onClick={handleSave} 
-              className="gradient-primary text-white"
+              className={hasUnsavedProfileChanges ? "gradient-primary text-white animate-pulse" : "gradient-primary text-white"}
               disabled={saving}
             >
               <Save className="mr-2 h-4 w-4" />
-              {saving ? 'Saving...' : 'Save Changes'}
+              {saving ? 'Saving...' : hasUnsavedProfileChanges ? 'Save Changes *' : 'Save Changes'}
             </Button>
+            {hasUnsavedProfileChanges && (
+              <p className="text-xs text-amber-600 mt-2">You have unsaved changes</p>
+            )}
           </CardContent>
         </Card>
 

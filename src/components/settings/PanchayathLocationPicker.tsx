@@ -66,7 +66,7 @@ export function PanchayathLocationPicker({ value, onChange }: LocationPickerProp
       if (parts.length >= 3) setDistrict(parts[2] || '');
       if (parts.length >= 4) setCountry(parts[3] || 'India');
     }
-  }, []);
+  }, [value]);
 
   // Update parent when location changes
   useEffect(() => {
