@@ -29,7 +29,7 @@ import { VerificationBadge } from '@/components/ui/verification-badge';
 import { useState, useEffect } from 'react';
 
 export function Navbar() {
-  const { user, profile, signOut, isEmailVerified } = useAuth();
+  const { user, profile, signOut } = useAuth();
   const navigate = useNavigate();
   const [isDark, setIsDark] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -138,7 +138,7 @@ export function Navbar() {
                           {profile?.full_name?.charAt(0) || user.email?.charAt(0).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
-                      {isEmailVerified && (
+                      {profile?.is_verified === true && (
                         <VerificationBadge 
                           isVerified={true} 
                           size="sm" 

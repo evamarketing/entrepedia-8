@@ -11,6 +11,8 @@ interface Profile {
   location: string | null;
   role: 'user' | 'admin';
   is_online: boolean;
+  is_verified: boolean | null;
+  mobile_number: string | null;
   created_at: string;
 }
 
@@ -19,14 +21,11 @@ interface AuthContextType {
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
-  isEmailVerified: boolean;
   isProfileComplete: boolean;
-  signInWithGoogle: () => Promise<void>;
-  signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUpWithEmail: (email: string, password: string, fullName: string, username?: string, phoneNumber?: string) => Promise<{ error: Error | null }>;
+  signInWithMobile: (mobileNumber: string, password: string) => Promise<{ error: Error | null }>;
+  signUpWithMobile: (mobileNumber: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
-  resendVerificationEmail: () => Promise<{ error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -81,17 +80,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signInWithGoogle = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/`,
-      },
-    });
-    if (error) throw error;
-  };
+  // Convert mobile number to a synthetic email for Supabase auth
+  const mobileToEmail = (mobile: string) => `${mobile}@mobile.samrambhak.app`;
 
-  const signInWithEmail = async (email: string, password: string) => {
+  const signInWithMobile = async (mobileNumber: string, password: string) => {
+    const email = mobileToEmail(mobileNumber);
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -99,31 +92,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error as Error | null };
   };
 
-  const signUpWithEmail = async (email: string, password: string, fullName: string, username?: string, phoneNumber?: string) => {
-    // For phone number signups, we use a synthetic email format
-    const isPhoneSignup = email.endsWith('@sms.samrambhak.app');
+  const signUpWithMobile = async (mobileNumber: string, password: string, fullName: string) => {
+    const email = mobileToEmail(mobileNumber);
     
     const { error, data } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        // No email redirect - user is auto logged in
         emailRedirectTo: `${window.location.origin}/`,
         data: {
           full_name: fullName,
-          username: isPhoneSignup ? phoneNumber : (username || null),
-          phone_number: phoneNumber || null,
+          mobile_number: mobileNumber,
         },
       },
     });
     
-    // Update profile after signup with phone as username if phone signup
+    // Update profile after signup with mobile number
     if (!error && data.user) {
       await supabase
         .from('profiles')
         .update({ 
-          username: isPhoneSignup ? phoneNumber : (username || null), 
+          mobile_number: mobileNumber, 
           full_name: fullName,
+          username: mobileNumber, // Use mobile as username initially
         })
         .eq('id', data.user.id);
     }
@@ -148,25 +139,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const resendVerificationEmail = async () => {
-    if (!user?.email) {
-      return { error: new Error('No email found') };
-    }
-    
-    const { error } = await supabase.auth.resend({
-      type: 'signup',
-      email: user.email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/`,
-      },
-    });
-    
-    return { error: error as Error | null };
-  };
-
-  // Check if email is verified
-  const isEmailVerified = !!user?.email_confirmed_at;
-
   // Check if profile is complete
   const isProfileComplete = !!(
     profile?.full_name &&
@@ -181,14 +153,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         profile,
         loading,
-        isEmailVerified,
         isProfileComplete,
-        signInWithGoogle,
-        signInWithEmail,
-        signUpWithEmail,
+        signInWithMobile,
+        signUpWithMobile,
         signOut,
         refreshProfile,
-        resendVerificationEmail,
       }}
     >
       {children}

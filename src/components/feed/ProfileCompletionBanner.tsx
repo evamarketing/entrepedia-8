@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, X, Settings, Mail, User, MapPin } from 'lucide-react';
+import { AlertCircle, X, Settings, User, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/AuthContext';
@@ -15,20 +15,13 @@ export function ProfileCompletionBanner({
   showCloseButton = false 
 }: ProfileCompletionBannerProps) {
   const navigate = useNavigate();
-  const { user, profile, isEmailVerified } = useAuth();
+  const { user, profile } = useAuth();
   const [dismissed, setDismissed] = useState(false);
 
   if (!user || dismissed) return null;
 
   // Check what's incomplete
   const issues: { icon: React.ReactNode; text: string }[] = [];
-  
-  if (!isEmailVerified) {
-    issues.push({
-      icon: <Mail className="h-4 w-4" />,
-      text: 'Verify your email address'
-    });
-  }
 
   if (!profile?.full_name) {
     issues.push({

@@ -26,18 +26,8 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Building2, MapPin, Users, Edit, Trash2, Mail } from 'lucide-react';
+import { Plus, Building2, MapPin, Users, Edit, Trash2 } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 
 type BusinessCategory = Database['public']['Enums']['business_category'];
 
@@ -66,7 +56,7 @@ const CATEGORIES: { value: BusinessCategory; label: string; icon: string }[] = [
 
 export default function MyBusinesses() {
   const navigate = useNavigate();
-  const { user, isEmailVerified, resendVerificationEmail } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
   
   const [businesses, setBusinesses] = useState<Business[]>([]);
@@ -75,8 +65,6 @@ export default function MyBusinesses() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingBusiness, setEditingBusiness] = useState<Business | null>(null);
   const [saving, setSaving] = useState(false);
-  const [verificationDialogOpen, setVerificationDialogOpen] = useState(false);
-  const [sendingVerification, setSendingVerification] = useState(false);
   
   // Form state
   const [name, setName] = useState('');
@@ -127,12 +115,6 @@ export default function MyBusinesses() {
   const handleCreateBusiness = async () => {
     if (!user) {
       navigate('/auth');
-      return;
-    }
-
-    // Check email verification
-    if (!isEmailVerified) {
-      setVerificationDialogOpen(true);
       return;
     }
 
@@ -493,46 +475,6 @@ export default function MyBusinesses() {
           </DialogContent>
         </Dialog>
 
-        {/* Email Verification Dialog */}
-        <AlertDialog open={verificationDialogOpen} onOpenChange={setVerificationDialogOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle className="flex items-center gap-2">
-                <Mail className="h-5 w-5 text-amber-500" />
-                Email Verification Required
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                You need to verify your email address before creating a business. This helps us ensure the authenticity of business owners.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={async () => {
-                  setSendingVerification(true);
-                  const { error } = await resendVerificationEmail();
-                  setSendingVerification(false);
-                  if (error) {
-                    toast({ 
-                      title: 'Failed to send verification email', 
-                      description: error.message,
-                      variant: 'destructive' 
-                    });
-                  } else {
-                    toast({ 
-                      title: 'Verification email sent!', 
-                      description: 'Please check your inbox and click the verification link.' 
-                    });
-                  }
-                  setVerificationDialogOpen(false);
-                }}
-                disabled={sendingVerification}
-              >
-                {sendingVerification ? 'Sending...' : 'Send Verification Email'}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </div>
     </MainLayout>
   );

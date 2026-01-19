@@ -8,15 +8,15 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Eye, EyeOff, Phone, Lock, User, ArrowLeft, Mail } from 'lucide-react';
+import { Eye, EyeOff, Phone, Lock, User, ArrowLeft } from 'lucide-react';
 import { z } from 'zod';
 import { Checkbox } from '@/components/ui/checkbox';
+import { supabase } from '@/integrations/supabase/client';
 
 const phoneSchema = z.string().min(1, 'Mobile number is required').refine(
   (val) => /^[0-9]{10}$/.test(val),
   { message: 'Please enter a valid 10-digit mobile number' }
 );
-const emailOrPhoneSchema = z.string().min(1, 'Email or mobile number is required');
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
 const nameSchema = z.string().min(2, 'Name must be at least 2 characters');
 
@@ -24,7 +24,6 @@ export default function Auth() {
   const [searchParams] = useSearchParams();
   const initialMode = searchParams.get('mode') === 'signup' ? 'signup' : 'signin';
   const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
-  const [emailOrPhone, setEmailOrPhone] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -36,11 +35,7 @@ export default function Auth() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isOver18, setIsOver18] = useState(false);
   
-  const {
-    user,
-    signInWithEmail,
-    signUpWithEmail
-  } = useAuth();
+  const { user, signUpWithMobile, signInWithMobile } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -50,39 +45,54 @@ export default function Auth() {
     }
   }, [user, navigate]);
 
-  const validate = () => {
+  const checkMobileExists = async (mobile: string): Promise<boolean> => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('mobile_number', mobile)
+      .maybeSingle();
+    
+    return !!data && !error;
+  };
+
+  const validate = async () => {
     const newErrors: Record<string, string> = {};
 
-    if (mode === 'signin') {
-      // For sign in, just check if value exists
-      if (!emailOrPhone.trim()) {
-        newErrors.emailOrPhone = 'Email or mobile number is required';
-      }
-    } else {
-      // For sign up, validate mobile number only
-      const phoneResult = phoneSchema.safeParse(mobileNumber);
-      if (!phoneResult.success) {
-        newErrors.mobileNumber = phoneResult.error.errors[0].message;
-      }
+    // Validate mobile number
+    const phoneResult = phoneSchema.safeParse(mobileNumber);
+    if (!phoneResult.success) {
+      newErrors.mobileNumber = phoneResult.error.errors[0].message;
     }
 
+    // Validate password
     const passwordResult = passwordSchema.safeParse(password);
     if (!passwordResult.success) {
       newErrors.password = passwordResult.error.errors[0].message;
     }
 
     if (mode === 'signup') {
+      // Validate full name
       const nameResult = nameSchema.safeParse(fullName);
       if (!nameResult.success) {
         newErrors.fullName = nameResult.error.errors[0].message;
       }
 
+      // Validate confirm password
       if (password !== confirmPassword) {
         newErrors.confirmPassword = 'Passwords do not match';
       }
 
+      // Check age confirmation
       if (!isOver18) {
         newErrors.age = 'You must confirm you are 18 years or older';
+      }
+
+      // Check if mobile number already exists (only for signup)
+      if (!newErrors.mobileNumber) {
+        const exists = await checkMobileExists(mobileNumber);
+        if (exists) {
+          newErrors.mobileNumber = 'This mobile number is already registered';
+        }
       }
     }
 
@@ -90,17 +100,19 @@ export default function Auth() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleEmailAuth = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
     setLoading(true);
 
     try {
+      const isValid = await validate();
+      if (!isValid) {
+        setLoading(false);
+        return;
+      }
+
       if (mode === 'signin') {
-        // For sign in, convert phone to email format if needed
-        const isEmailInput = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailOrPhone);
-        const authEmail = isEmailInput ? emailOrPhone : `${emailOrPhone}@sms.samrambhak.app`;
-        const { error } = await signInWithEmail(authEmail, password);
+        const { error } = await signInWithMobile(mobileNumber, password);
         if (error) {
           toast({
             title: 'Sign in failed',
@@ -109,9 +121,7 @@ export default function Auth() {
           });
         }
       } else {
-        // For sign up, use mobile number only - convert to email format for Supabase
-        const authEmail = `${mobileNumber}@sms.samrambhak.app`;
-        const { error } = await signUpWithEmail(authEmail, password, fullName, undefined, mobileNumber);
+        const { error } = await signUpWithMobile(mobileNumber, password, fullName);
         if (error) {
           toast({
             title: 'Sign up failed',
@@ -169,9 +179,9 @@ export default function Auth() {
                 <TabsTrigger value="signup">Sign Up</TabsTrigger>
               </TabsList>
 
-              <form onSubmit={handleEmailAuth} className="space-y-4 mt-4">
-                <TabsContent value="signup" className="mt-0 space-y-4">
-                  {/* Full Name */}
+              <form onSubmit={handleAuth} className="space-y-4 mt-4">
+                {/* Full Name - only for signup */}
+                {mode === 'signup' && (
                   <div className="space-y-2">
                     <Label htmlFor="fullName">Full Name</Label>
                     <div className="relative">
@@ -186,47 +196,27 @@ export default function Auth() {
                     </div>
                     {errors.fullName && <p className="text-sm text-destructive">{errors.fullName}</p>}
                   </div>
-
-                  {/* Mobile Number for Sign Up */}
-                  <div className="space-y-2">
-                    <Label htmlFor="mobileNumber">Mobile Number</Label>
-                    <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input 
-                        id="mobileNumber" 
-                        type="tel"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        maxLength={10}
-                        placeholder="Enter 10-digit mobile number"
-                        className="pl-10" 
-                        value={mobileNumber} 
-                        onChange={e => setMobileNumber(e.target.value.replace(/\D/g, ''))} 
-                      />
-                    </div>
-                    {errors.mobileNumber && <p className="text-sm text-destructive">{errors.mobileNumber}</p>}
-                  </div>
-
-                </TabsContent>
-
-                {/* Email or Phone for Sign In only */}
-                {mode === 'signin' && (
-                  <div className="space-y-2">
-                    <Label htmlFor="emailOrPhone">Email / Mobile</Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input 
-                        id="emailOrPhone" 
-                        type="text"
-                        placeholder="Email or mobile number"
-                        className="pl-10" 
-                        value={emailOrPhone} 
-                        onChange={e => setEmailOrPhone(e.target.value.trim())} 
-                      />
-                    </div>
-                    {errors.emailOrPhone && <p className="text-sm text-destructive">{errors.emailOrPhone}</p>}
-                  </div>
                 )}
+
+                {/* Mobile Number */}
+                <div className="space-y-2">
+                  <Label htmlFor="mobileNumber">Mobile Number</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      id="mobileNumber" 
+                      type="tel"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={10}
+                      placeholder="Enter 10-digit mobile number"
+                      className="pl-10" 
+                      value={mobileNumber} 
+                      onChange={e => setMobileNumber(e.target.value.replace(/\D/g, ''))} 
+                    />
+                  </div>
+                  {errors.mobileNumber && <p className="text-sm text-destructive">{errors.mobileNumber}</p>}
+                </div>
 
                 {/* Password */}
                 <div className="space-y-2">
