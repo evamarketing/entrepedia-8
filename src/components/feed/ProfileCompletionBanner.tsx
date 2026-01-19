@@ -12,7 +12,7 @@ interface ProfileCompletionBannerProps {
 
 export function ProfileCompletionBanner({ 
   className = '',
-  showCloseButton = false 
+  showCloseButton = true 
 }: ProfileCompletionBannerProps) {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
@@ -81,16 +81,15 @@ export function ProfileCompletionBanner({
             <Settings className="mr-1 h-3 w-3" />
             Settings
           </Button>
-          {showCloseButton && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={() => setDismissed(true)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 hover:bg-amber-200/50"
+            onClick={() => setDismissed(true)}
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </Button>
         </div>
       </div>
     </Alert>

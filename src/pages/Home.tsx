@@ -142,8 +142,7 @@ export default function Home() {
             {/* Profile Completion Warning - Fixed on top */}
             {user && <ProfileCompletionBanner className="sticky top-16 z-40" />}
 
-            {/* Location Prompt for logged-in users */}
-            {user && <LocationPromptCard />}
+            {/* Location Prompt removed as per user request */}
 
             {/* Mobile Quick Action */}
             <div className="flex gap-2 lg:hidden">

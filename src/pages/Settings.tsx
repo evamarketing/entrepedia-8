@@ -79,23 +79,17 @@ export default function Settings() {
 
     setUploadingAvatar(true);
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/avatar.${fileExt}`;
+      // Use edge function to upload avatar (bypasses RLS for custom auth)
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('user_id', user.id);
 
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, file, { upsert: true });
+      const { data, error } = await supabase.functions.invoke('upload-avatar', {
+        body: formData,
+      });
 
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(fileName);
-
-      await supabase
-        .from('profiles')
-        .update({ avatar_url: urlData.publicUrl })
-        .eq('id', user.id);
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
       await refreshProfile();
       toast({ title: 'Avatar updated!' });
