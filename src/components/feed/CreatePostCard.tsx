@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Image, Youtube, Link2, X, Loader2, Facebook, Instagram } from 'lucide-react';
+import { Image, Youtube, X, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -23,10 +23,6 @@ export function CreatePostCard({ onPostCreated }: CreatePostCardProps) {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [showYoutubeInput, setShowYoutubeInput] = useState(false);
-  const [facebookUrl, setFacebookUrl] = useState('');
-  const [showFacebookInput, setShowFacebookInput] = useState(false);
-  const [instagramUrl, setInstagramUrl] = useState('');
-  const [showInstagramInput, setShowInstagramInput] = useState(false);
   const [loading, setLoading] = useState(false);
 
   if (!user) return null;
@@ -50,7 +46,7 @@ export function CreatePostCard({ onPostCreated }: CreatePostCardProps) {
   };
 
   const handleSubmit = async () => {
-    if (!content.trim() && !imageFile && !youtubeUrl && !facebookUrl && !instagramUrl) {
+    if (!content.trim() && !imageFile && !youtubeUrl) {
       toast({ title: 'Please add some content', variant: 'destructive' });
       return;
     }
@@ -83,8 +79,6 @@ export function CreatePostCard({ onPostCreated }: CreatePostCardProps) {
         content: content.trim() || null,
         image_url: imageUrl,
         youtube_url: youtubeUrl || null,
-        facebook_url: facebookUrl || null,
-        instagram_url: instagramUrl || null,
       });
 
       if (error) throw error;
@@ -95,10 +89,6 @@ export function CreatePostCard({ onPostCreated }: CreatePostCardProps) {
       setImagePreview(null);
       setYoutubeUrl('');
       setShowYoutubeInput(false);
-      setFacebookUrl('');
-      setShowFacebookInput(false);
-      setInstagramUrl('');
-      setShowInstagramInput(false);
       
       toast({ title: 'Post created!' });
       onPostCreated();
@@ -169,50 +159,6 @@ export function CreatePostCard({ onPostCreated }: CreatePostCardProps) {
               </div>
             )}
 
-            {/* Facebook Input */}
-            {showFacebookInput && (
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Paste Facebook URL..."
-                  value={facebookUrl}
-                  onChange={(e) => setFacebookUrl(e.target.value)}
-                  className="flex-1"
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => {
-                    setShowFacebookInput(false);
-                    setFacebookUrl('');
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-
-            {/* Instagram Input */}
-            {showInstagramInput && (
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Paste Instagram URL..."
-                  value={instagramUrl}
-                  onChange={(e) => setInstagramUrl(e.target.value)}
-                  className="flex-1"
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => {
-                    setShowInstagramInput(false);
-                    setInstagramUrl('');
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-
             {/* Actions */}
             <div className="flex items-center justify-between pt-2 border-t">
               <div className="flex gap-1">
@@ -241,30 +187,12 @@ export function CreatePostCard({ onPostCreated }: CreatePostCardProps) {
                   <Youtube className="h-5 w-5" />
                   <span className="hidden sm:inline">YouTube</span>
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-2 text-muted-foreground"
-                  onClick={() => setShowFacebookInput(true)}
-                >
-                  <Facebook className="h-5 w-5" />
-                  <span className="hidden sm:inline">Facebook</span>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-2 text-muted-foreground"
-                  onClick={() => setShowInstagramInput(true)}
-                >
-                  <Instagram className="h-5 w-5" />
-                  <span className="hidden sm:inline">Instagram</span>
-                </Button>
               </div>
 
               <Button
                 className="gradient-primary text-white"
                 onClick={handleSubmit}
-                disabled={loading || (!content.trim() && !imageFile && !youtubeUrl && !facebookUrl && !instagramUrl)}
+                disabled={loading || (!content.trim() && !imageFile && !youtubeUrl)}
               >
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Post
