@@ -1002,7 +1002,7 @@ export type Database = {
     Functions: {
       contains_blocked_words: { Args: { content: string }; Returns: boolean }
       get_or_create_conversation: {
-        Args: { other_user_id: string }
+        Args: { current_user_id?: string; other_user_id: string }
         Returns: string
       }
       has_any_admin_role: { Args: { _user_id: string }; Returns: boolean }
