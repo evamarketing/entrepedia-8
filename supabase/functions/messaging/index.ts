@@ -13,8 +13,17 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error("Missing required env vars", { hasUrl: !!supabaseUrl, hasServiceRole: !!supabaseServiceKey });
+      return new Response(
+        JSON.stringify({ error: "Server not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Validate session token
@@ -30,7 +39,15 @@ serve(async (req) => {
     const { data: userId, error: sessionError } = await supabase
       .rpc("validate_session", { p_session_token: sessionToken });
 
-    if (sessionError || !userId) {
+    if (sessionError) {
+      console.error("validate_session error:", sessionError);
+      return new Response(
+        JSON.stringify({ error: "Session validation failed" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!userId) {
       return new Response(
         JSON.stringify({ error: "Invalid or expired session" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }

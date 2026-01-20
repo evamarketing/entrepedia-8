@@ -34,11 +34,19 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error("Missing required env vars", { hasUrl: !!supabaseUrl, hasServiceRole: !!supabaseServiceKey });
+      return new Response(
+        JSON.stringify({ error: "Server not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    
+
     const { action, mobile_number, password, full_name } = await req.json();
 
     if (!mobile_number || !password) {
@@ -121,9 +129,13 @@ serve(async (req) => {
           expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
         });
 
-      if (sessionError) {
-        console.error("Session creation error:", sessionError);
-      }
+       if (sessionError) {
+         console.error("Session creation error:", sessionError);
+         return new Response(
+           JSON.stringify({ error: "Failed to create session" }),
+           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+         );
+       }
 
       return new Response(
         JSON.stringify({
@@ -188,9 +200,13 @@ serve(async (req) => {
           expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
         });
 
-      if (sessionError) {
-        console.error("Session creation error:", sessionError);
-      }
+       if (sessionError) {
+         console.error("Session creation error:", sessionError);
+         return new Response(
+           JSON.stringify({ error: "Failed to create session" }),
+           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+         );
+       }
 
       // Update online status
       await supabase
