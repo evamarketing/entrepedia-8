@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -80,13 +80,17 @@ export function PanchayathLocationPicker({ value, onChange }: LocationPickerProp
     setCountry(nextCountry);
   }, [value]);
 
-  // Update parent when location changes
+  // Update parent when location changes - use ref to prevent initial call
+  const initialRender = useRef(true);
+  
   useEffect(() => {
-    const locationParts = [place, panchayath, district, country].filter(Boolean);
-    if (locationParts.length > 0) {
-      onChange(locationParts.join(', '));
+    if (initialRender.current) {
+      initialRender.current = false;
+      return;
     }
-  }, [country, district, panchayath, place]);
+    const locationParts = [place, panchayath, district, country].filter(Boolean);
+    onChange(locationParts.join(', '));
+  }, [country, district, panchayath, place, onChange]);
 
   // Get suggestions for panchayath based on selected district
   const panchayathSuggestions = district ? COMMON_PANCHAYATHS[district] || [] : [];

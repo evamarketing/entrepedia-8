@@ -15,6 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Camera, Save, LogOut, Phone, CheckCircle, AlertTriangle, Circle, Mail, Eye, EyeOff, Shield, BadgeCheck, Loader2, Send, MapPin } from 'lucide-react';
 import { PanchayathLocationPicker } from '@/components/settings/PanchayathLocationPicker';
+import { FollowStats } from '@/components/settings/FollowStats';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 
@@ -550,6 +551,9 @@ export default function Settings() {
             )}
           </CardContent>
         </Card>
+
+        {/* Following & Followers */}
+        <FollowStats userId={user.id} />
 
         {/* Account Settings */}
         <Card className="border-0 shadow-soft">
