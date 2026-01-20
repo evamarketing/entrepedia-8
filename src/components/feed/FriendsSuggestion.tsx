@@ -98,9 +98,21 @@ export function FriendsSuggestion() {
     }
 
     try {
-      await supabase
-        .from('follows')
-        .insert({ follower_id: user.id, following_id: userId });
+      const stored = localStorage.getItem('samrambhak_auth');
+      const sessionToken = stored ? JSON.parse(stored).session_token : null;
+
+      const { data, error } = await supabase.functions.invoke('toggle-follow', {
+        body: {
+          user_id: user.id,
+          following_id: userId,
+          action: 'follow',
+          session_token: sessionToken,
+        },
+      });
+
+      if (error || data?.error) {
+        throw new Error(data?.error || error?.message || 'Failed to follow');
+      }
 
       setFollowingStates(prev => ({ ...prev, [userId]: true }));
       toast({ title: 'Following!' });
@@ -109,6 +121,7 @@ export function FriendsSuggestion() {
       setFriends(prev => prev.filter(f => f.id !== userId));
     } catch (error) {
       console.error('Error following:', error);
+      toast({ title: 'Failed to follow', variant: 'destructive' });
     }
   };
 
