@@ -394,7 +394,7 @@ export default function CommunityDetail() {
                           )}
                         </div>
                         <p className="text-sm text-muted-foreground truncate">
-                          @{member.profiles?.username || 'user'}
+                          ID: {member.user_id.slice(0, 8)}
                         </p>
                       </div>
                     </div>
@@ -480,10 +480,10 @@ export default function CommunityDetail() {
                                 className="font-semibold text-foreground cursor-pointer hover:underline"
                                 onClick={() => navigate(`/user/${discussion.user_id}`)}
                               >
-                                {discussion.profiles?.username || discussion.profiles?.full_name || 'Anonymous'}
+                                {discussion.profiles?.full_name || 'Anonymous'}
                               </span>
                               <span className="text-xs text-muted-foreground">
-                                ({discussion.user_id.slice(0, 8)}...)
+                                (ID: {discussion.user_id.slice(0, 8)})
                               </span>
                               <span className="text-xs text-muted-foreground">
                                 · {formatDistanceToNow(new Date(discussion.created_at), { addSuffix: true })}
