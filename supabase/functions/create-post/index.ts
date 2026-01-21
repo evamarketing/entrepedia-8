@@ -18,7 +18,7 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    const { user_id, content, image_url, youtube_url } = await req.json();
+    const { user_id, content, image_url, youtube_url, business_id } = await req.json();
 
     if (!user_id) {
       return new Response(
@@ -49,6 +49,29 @@ serve(async (req) => {
       }
     }
 
+    // If business_id is provided, verify ownership
+    if (business_id) {
+      const { data: businessData, error: businessError } = await supabase
+        .from("businesses")
+        .select("id, owner_id")
+        .eq("id", business_id)
+        .maybeSingle();
+
+      if (businessError || !businessData) {
+        return new Response(
+          JSON.stringify({ error: "Business not found" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (businessData.owner_id !== user_id) {
+        return new Response(
+          JSON.stringify({ error: "You don't have permission to post for this business" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     // Validate content
     if (!content && !image_url && !youtube_url) {
       return new Response(
@@ -65,6 +88,7 @@ serve(async (req) => {
         content: content || null,
         image_url: image_url || null,
         youtube_url: youtube_url || null,
+        business_id: business_id || null,
       })
       .select()
       .single();

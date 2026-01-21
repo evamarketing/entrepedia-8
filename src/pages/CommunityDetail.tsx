@@ -16,7 +16,8 @@ import {
   UserMinus, 
   Crown,
   Send,
-  MessageSquare
+  MessageSquare,
+  Trash2
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -185,6 +186,26 @@ export default function CommunityDetail() {
       toast({ title: 'Error posting message', description: error.message, variant: 'destructive' });
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleDeleteDiscussion = async (discussionId: string) => {
+    if (!user) return;
+    
+    try {
+      const { error } = await supabase
+        .from('community_discussions')
+        .delete()
+        .eq('id', discussionId)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      
+      toast({ title: 'Message deleted' });
+      fetchCommunityData();
+    } catch (error: any) {
+      console.error('Error deleting discussion:', error);
+      toast({ title: 'Error deleting message', variant: 'destructive' });
     }
   };
 
@@ -423,19 +444,31 @@ export default function CommunityDetail() {
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span 
-                              className="font-semibold text-foreground cursor-pointer hover:underline"
-                              onClick={() => navigate(`/user/${discussion.user_id}`)}
-                            >
-                              {discussion.profiles?.username || discussion.profiles?.full_name || 'Anonymous'}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              ({discussion.user_id.slice(0, 8)}...)
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              · {formatDistanceToNow(new Date(discussion.created_at), { addSuffix: true })}
-                            </span>
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span 
+                                className="font-semibold text-foreground cursor-pointer hover:underline"
+                                onClick={() => navigate(`/user/${discussion.user_id}`)}
+                              >
+                                {discussion.profiles?.username || discussion.profiles?.full_name || 'Anonymous'}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                ({discussion.user_id.slice(0, 8)}...)
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                · {formatDistanceToNow(new Date(discussion.created_at), { addSuffix: true })}
+                              </span>
+                            </div>
+                            {user?.id === discussion.user_id && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={() => handleDeleteDiscussion(discussion.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                           <p className="text-foreground whitespace-pre-wrap break-words">
                             {discussion.content}

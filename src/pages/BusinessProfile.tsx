@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PostCard } from '@/components/feed/PostCard';
@@ -8,6 +8,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -20,7 +22,11 @@ import {
   Image as ImageIcon,
   Heart,
   HeartOff,
-  ExternalLink
+  ExternalLink,
+  Plus,
+  X,
+  Loader2,
+  Upload
 } from 'lucide-react';
 
 interface BusinessData {
@@ -84,8 +90,10 @@ const CATEGORY_INFO: Record<string, { label: string; icon: string }> = {
 export default function BusinessProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   
   const [business, setBusiness] = useState<BusinessData | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -94,6 +102,17 @@ export default function BusinessProfile() {
   const [isFollowing, setIsFollowing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [followLoading, setFollowLoading] = useState(false);
+  
+  // Post creation states
+  const [showPostForm, setShowPostForm] = useState(false);
+  const [postContent, setPostContent] = useState('');
+  const [postImageFile, setPostImageFile] = useState<File | null>(null);
+  const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
+  const [postYoutubeUrl, setPostYoutubeUrl] = useState('');
+  const [postLoading, setPostLoading] = useState(false);
+  
+  // Gallery upload states
+  const [galleryLoading, setGalleryLoading] = useState(false);
 
   const isOwner = user?.id === business?.owner_id;
 
@@ -196,6 +215,135 @@ export default function BusinessProfile() {
       console.error('Error toggling follow:', error);
     } finally {
       setFollowLoading(false);
+    }
+  };
+
+  // Post creation handlers
+  const handlePostImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast({ title: 'Image must be less than 5MB', variant: 'destructive' });
+        return;
+      }
+      setPostImageFile(file);
+      setPostImagePreview(URL.createObjectURL(file));
+    }
+  };
+
+  const removePostImage = () => {
+    setPostImageFile(null);
+    setPostImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleCreatePost = async () => {
+    if (!postContent.trim() && !postImageFile && !postYoutubeUrl) {
+      toast({ title: 'Please add some content', variant: 'destructive' });
+      return;
+    }
+
+    if (!user || !id) return;
+
+    setPostLoading(true);
+    try {
+      let imageUrl = null;
+
+      // Upload image if selected
+      if (postImageFile) {
+        const fileExt = postImageFile.name.split('.').pop();
+        const fileName = `${id}/${Date.now()}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('posts')
+          .upload(fileName, postImageFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage
+          .from('posts')
+          .getPublicUrl(fileName);
+
+        imageUrl = urlData.publicUrl;
+      }
+
+      // Create post via edge function
+      const response = await supabase.functions.invoke('create-post', {
+        body: {
+          user_id: user.id,
+          content: postContent.trim() || null,
+          image_url: imageUrl,
+          youtube_url: postYoutubeUrl || null,
+          business_id: id,
+        },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Failed to create post');
+      }
+
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+
+      // Reset form
+      setPostContent('');
+      setPostImageFile(null);
+      setPostImagePreview(null);
+      setPostYoutubeUrl('');
+      setShowPostForm(false);
+      
+      toast({ title: 'Post created!' });
+      fetchBusinessData();
+    } catch (error: any) {
+      toast({ title: 'Error creating post', description: error.message, variant: 'destructive' });
+    } finally {
+      setPostLoading(false);
+    }
+  };
+
+  // Gallery upload handler
+  const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user || !id) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: 'Image must be less than 5MB', variant: 'destructive' });
+      return;
+    }
+
+    setGalleryLoading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${id}/gallery/${Date.now()}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('posts')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('posts')
+        .getPublicUrl(fileName);
+
+      // Insert into business_images
+      const { error: insertError } = await supabase
+        .from('business_images')
+        .insert({
+          business_id: id,
+          image_url: urlData.publicUrl,
+        });
+
+      if (insertError) throw insertError;
+
+      toast({ title: 'Image uploaded!' });
+      fetchBusinessData();
+    } catch (error: any) {
+      toast({ title: 'Error uploading image', description: error.message, variant: 'destructive' });
+    } finally {
+      setGalleryLoading(false);
+      if (galleryInputRef.current) galleryInputRef.current.value = '';
     }
   };
 
@@ -353,6 +501,103 @@ export default function BusinessProfile() {
           </TabsList>
 
           <TabsContent value="posts" className="mt-4 space-y-4">
+            {/* Create Post Section for Owners */}
+            {isOwner && (
+              <Card className="border-0 shadow-soft">
+                <CardContent className="pt-4">
+                  {!showPostForm ? (
+                    <Button 
+                      onClick={() => setShowPostForm(true)} 
+                      className="w-full gradient-primary text-white"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Post
+                    </Button>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-semibold text-foreground">Create a Post</h3>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => {
+                            setShowPostForm(false);
+                            setPostContent('');
+                            setPostImageFile(null);
+                            setPostImagePreview(null);
+                            setPostYoutubeUrl('');
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      
+                      <Textarea
+                        placeholder="Share an update about your business..."
+                        className="min-h-[100px] resize-none"
+                        value={postContent}
+                        onChange={(e) => setPostContent(e.target.value)}
+                      />
+
+                      {/* Image Preview */}
+                      {postImagePreview && (
+                        <div className="relative inline-block">
+                          <img
+                            src={postImagePreview}
+                            alt="Preview"
+                            className="max-h-48 rounded-xl object-cover"
+                          />
+                          <Button
+                            variant="secondary"
+                            size="icon"
+                            className="absolute top-2 right-2 h-8 w-8"
+                            onClick={removePostImage}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* YouTube URL Input */}
+                      <Input
+                        placeholder="YouTube URL (optional)"
+                        value={postYoutubeUrl}
+                        onChange={(e) => setPostYoutubeUrl(e.target.value)}
+                      />
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex gap-2">
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handlePostImageSelect}
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => fileInputRef.current?.click()}
+                          >
+                            <ImageIcon className="h-4 w-4 mr-2" />
+                            Add Image
+                          </Button>
+                        </div>
+                        <Button
+                          onClick={handleCreatePost}
+                          disabled={postLoading || (!postContent.trim() && !postImageFile && !postYoutubeUrl)}
+                          className="gradient-primary text-white"
+                        >
+                          {postLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          Post
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {posts.length > 0 ? (
               posts.map((post) => (
                 <PostCard key={post.id} post={post} onUpdate={fetchBusinessData} />
@@ -361,12 +606,42 @@ export default function BusinessProfile() {
               <Card className="border-0 shadow-soft">
                 <CardContent className="py-12 text-center">
                   <p className="text-muted-foreground">No posts yet</p>
+                  {isOwner && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Create your first post to share updates with your followers!
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             )}
           </TabsContent>
 
           <TabsContent value="gallery" className="mt-4">
+            {/* Upload Button for Owners */}
+            {isOwner && (
+              <div className="mb-4">
+                <input
+                  ref={galleryInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleGalleryUpload}
+                />
+                <Button 
+                  onClick={() => galleryInputRef.current?.click()}
+                  disabled={galleryLoading}
+                  className="gradient-primary text-white"
+                >
+                  {galleryLoading ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
+                  Upload Image
+                </Button>
+              </div>
+            )}
+
             {images.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 {images.map((image) => (
@@ -383,6 +658,11 @@ export default function BusinessProfile() {
               <Card className="border-0 shadow-soft">
                 <CardContent className="py-12 text-center">
                   <p className="text-muted-foreground">No images yet</p>
+                  {isOwner && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Upload images to showcase your business!
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             )}
