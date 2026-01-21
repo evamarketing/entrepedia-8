@@ -452,7 +452,7 @@ export default function Messages() {
                                   <p className="font-medium text-foreground truncate">
                                     {u.full_name || 'Unknown'}
                                   </p>
-                                  {u.username && (
+                                  {u.username && !/^\d+$/.test(u.username) && (
                                     <p className="text-xs text-muted-foreground truncate">
                                       @{u.username}
                                     </p>
