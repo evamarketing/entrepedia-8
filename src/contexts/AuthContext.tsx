@@ -44,6 +44,13 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'samrambhak_auth';
 
+// Separate component that handles session refresh - must be inside AuthProvider
+function SessionRefreshManager() {
+  const { user } = useAuth();
+  useSessionRefresh(!!user);
+  return null;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -195,9 +202,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profile?.location
   );
 
-  // Automatic session refresh - extends session on user activity
-  useSessionRefresh(!!user);
-
   return (
     <AuthContext.Provider
       value={{
@@ -211,6 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshProfile,
       }}
     >
+      <SessionRefreshManager />
       {children}
     </AuthContext.Provider>
   );
