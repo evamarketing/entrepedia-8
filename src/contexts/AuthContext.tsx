@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useSessionRefresh } from '@/hooks/useSessionRefresh';
 
 interface Profile {
   id: string;
@@ -193,6 +194,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profile?.username &&
     profile?.location
   );
+
+  // Automatic session refresh - extends session on user activity
+  useSessionRefresh(!!user);
 
   return (
     <AuthContext.Provider

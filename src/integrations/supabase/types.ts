@@ -1035,6 +1035,7 @@ export type Database = {
           id: string
           is_active: boolean
           session_token: string
+          updated_at: string | null
           user_id: string
         }
         Insert: {
@@ -1043,6 +1044,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           session_token: string
+          updated_at?: string | null
           user_id: string
         }
         Update: {
@@ -1051,6 +1053,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           session_token?: string
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: []
@@ -1147,6 +1150,7 @@ export type Database = {
         Returns: boolean
       }
       is_following: { Args: { target_user_id: string }; Returns: boolean }
+      refresh_session: { Args: { p_session_token: string }; Returns: boolean }
       validate_session: { Args: { p_session_token: string }; Returns: string }
     }
     Enums: {
