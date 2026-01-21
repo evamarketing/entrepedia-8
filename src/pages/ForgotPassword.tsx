@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { format } from 'date-fns';
 import logoImg from '@/assets/logo.jpg';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -6,10 +7,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Eye, EyeOff, Phone, Lock, ArrowLeft, Check, X, KeyRound, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Phone, Lock, ArrowLeft, Check, X, KeyRound, Loader2, CalendarIcon } from 'lucide-react';
 import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
-import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 
 const phoneSchema = z.string().min(1, 'Mobile number is required').refine(
   (val) => /^[0-9]{10}$/.test(val),
@@ -17,19 +20,18 @@ const phoneSchema = z.string().min(1, 'Mobile number is required').refine(
 );
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
 
-type Step = 'mobile' | 'otp' | 'password' | 'success';
+type Step = 'verify' | 'password' | 'success';
 
 export default function ForgotPassword() {
-  const [step, setStep] = useState<Step>('mobile');
+  const [step, setStep] = useState<Step>('verify');
   const [mobileNumber, setMobileNumber] = useState('');
-  const [otp, setOtp] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState<Date | undefined>(undefined);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [resendCooldown, setResendCooldown] = useState(0);
   
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -64,88 +66,47 @@ export default function ForgotPassword() {
 
   const passwordStrength = getPasswordStrength(newPassword);
 
-  const startResendCooldown = () => {
-    setResendCooldown(60);
-    const interval = setInterval(() => {
-      setResendCooldown((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  const handleRequestOTP = async () => {
+  const handleVerifyIdentity = async () => {
+    const newErrors: Record<string, string> = {};
+    
     const phoneResult = phoneSchema.safeParse(mobileNumber);
     if (!phoneResult.success) {
-      setErrors({ mobileNumber: phoneResult.error.errors[0].message });
+      newErrors.mobileNumber = phoneResult.error.errors[0].message;
+    }
+    
+    if (!dateOfBirth) {
+      newErrors.dateOfBirth = 'Date of birth is required';
+    }
+    
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
       return;
     }
+    
     setErrors({});
     setLoading(true);
 
     try {
       const { data, error } = await supabase.functions.invoke('password-reset', {
-        body: { action: 'request_otp', mobile_number: mobileNumber }
+        body: { 
+          action: 'verify_identity', 
+          mobile_number: mobileNumber,
+          date_of_birth: format(dateOfBirth!, 'yyyy-MM-dd')
+        }
       });
 
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
       toast({
-        title: 'OTP Sent',
-        description: 'Please check your mobile for the verification code.',
-      });
-      
-      // For testing: show debug OTP
-      if (data.debug_otp) {
-        toast({
-          title: 'Debug OTP (Testing Only)',
-          description: `Your OTP is: ${data.debug_otp}`,
-          duration: 30000,
-        });
-      }
-      
-      startResendCooldown();
-      setStep('otp');
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to send OTP',
-        variant: 'destructive'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOTP = async () => {
-    if (otp.length !== 6) {
-      setErrors({ otp: 'Please enter a valid 6-digit OTP' });
-      return;
-    }
-    setErrors({});
-    setLoading(true);
-
-    try {
-      const { data, error } = await supabase.functions.invoke('password-reset', {
-        body: { action: 'verify_otp', mobile_number: mobileNumber, otp }
-      });
-
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
-
-      toast({
-        title: 'OTP Verified',
+        title: 'Identity Verified',
         description: 'Please set your new password.',
       });
       setStep('password');
     } catch (error: any) {
       toast({
         title: 'Verification Failed',
-        description: error.message || 'Invalid or expired OTP',
+        description: error.message || 'Mobile number and date of birth do not match',
         variant: 'destructive'
       });
     } finally {
@@ -173,7 +134,12 @@ export default function ForgotPassword() {
 
     try {
       const { data, error } = await supabase.functions.invoke('password-reset', {
-        body: { action: 'reset_password', mobile_number: mobileNumber, otp, new_password: newPassword }
+        body: { 
+          action: 'reset_password', 
+          mobile_number: mobileNumber, 
+          date_of_birth: format(dateOfBirth!, 'yyyy-MM-dd'),
+          new_password: newPassword 
+        }
       });
 
       if (error) throw error;
@@ -197,13 +163,13 @@ export default function ForgotPassword() {
 
   const renderStepContent = () => {
     switch (step) {
-      case 'mobile':
+      case 'verify':
         return (
           <>
             <CardHeader className="space-y-1 pb-4">
               <CardTitle className="text-2xl text-center">Forgot Password</CardTitle>
               <CardDescription className="text-center">
-                Enter your registered mobile number to receive a verification code
+                Enter your registered mobile number and date of birth to verify your identity
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -226,59 +192,44 @@ export default function ForgotPassword() {
                 {errors.mobileNumber && <p className="text-sm text-destructive">{errors.mobileNumber}</p>}
               </div>
               
-              <Button 
-                onClick={handleRequestOTP}
-                className="w-full h-12 gradient-primary text-white font-semibold" 
-                disabled={loading || !mobileNumber}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending OTP...
-                  </>
-                ) : (
-                  'Send Verification Code'
-                )}
-              </Button>
-            </CardContent>
-          </>
-        );
-
-      case 'otp':
-        return (
-          <>
-            <CardHeader className="space-y-1 pb-4">
-              <CardTitle className="text-2xl text-center">Enter OTP</CardTitle>
-              <CardDescription className="text-center">
-                We've sent a 6-digit code to {mobileNumber}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Verification Code</Label>
-                <div className="flex justify-center">
-                  <InputOTP 
-                    maxLength={6} 
-                    value={otp} 
-                    onChange={setOtp}
-                  >
-                    <InputOTPGroup>
-                      <InputOTPSlot index={0} />
-                      <InputOTPSlot index={1} />
-                      <InputOTPSlot index={2} />
-                      <InputOTPSlot index={3} />
-                      <InputOTPSlot index={4} />
-                      <InputOTPSlot index={5} />
-                    </InputOTPGroup>
-                  </InputOTP>
-                </div>
-                {errors.otp && <p className="text-sm text-destructive text-center">{errors.otp}</p>}
+                <Label>Date of Birth</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !dateOfBirth && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateOfBirth ? format(dateOfBirth, "PPP") : <span>Select your date of birth</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={dateOfBirth}
+                      onSelect={setDateOfBirth}
+                      disabled={(date) =>
+                        date > new Date() || date < new Date("1900-01-01")
+                      }
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                      captionLayout="dropdown-buttons"
+                      fromYear={1920}
+                      toYear={new Date().getFullYear()}
+                    />
+                  </PopoverContent>
+                </Popover>
+                {errors.dateOfBirth && <p className="text-sm text-destructive">{errors.dateOfBirth}</p>}
               </div>
               
               <Button 
-                onClick={handleVerifyOTP}
+                onClick={handleVerifyIdentity}
                 className="w-full h-12 gradient-primary text-white font-semibold" 
-                disabled={loading || otp.length !== 6}
+                disabled={loading || !mobileNumber || !dateOfBirth}
               >
                 {loading ? (
                   <>
@@ -286,27 +237,8 @@ export default function ForgotPassword() {
                     Verifying...
                   </>
                 ) : (
-                  'Verify OTP'
+                  'Verify Identity'
                 )}
-              </Button>
-              
-              <div className="text-center">
-                <Button 
-                  variant="link" 
-                  onClick={handleRequestOTP}
-                  disabled={resendCooldown > 0 || loading}
-                  className="text-sm"
-                >
-                  {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : "Didn't receive code? Resend"}
-                </Button>
-              </div>
-              
-              <Button 
-                variant="ghost" 
-                onClick={() => { setStep('mobile'); setOtp(''); }}
-                className="w-full"
-              >
-                Change Mobile Number
               </Button>
             </CardContent>
           </>
@@ -430,6 +362,14 @@ export default function ForgotPassword() {
                   'Reset Password'
                 )}
               </Button>
+              
+              <Button 
+                variant="ghost" 
+                onClick={() => { setStep('verify'); setNewPassword(''); setConfirmPassword(''); }}
+                className="w-full"
+              >
+                Go Back
+              </Button>
             </CardContent>
           </>
         );
@@ -451,7 +391,7 @@ export default function ForgotPassword() {
                 onClick={() => navigate('/auth')}
                 className="w-full h-12 gradient-primary text-white font-semibold"
               >
-                Sign In
+                Sign In Now
               </Button>
             </CardContent>
           </>
@@ -462,17 +402,17 @@ export default function ForgotPassword() {
   return (
     <div className="min-h-screen flex items-center justify-center gradient-hero px-4 py-12">
       <div className="w-full max-w-md">
-        {step !== 'success' && (
-          <Button variant="ghost" className="mb-6" onClick={() => navigate('/auth')}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Sign In
-          </Button>
-        )}
+        {/* Back button */}
+        <Button variant="ghost" className="mb-6" onClick={() => navigate('/auth')}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to sign in
+        </Button>
 
+        {/* Logo */}
         <div className="text-center mb-8">
           <img src={logoImg} alt="സംരംഭക Logo" className="h-20 w-auto rounded-2xl mx-auto mb-4 shadow-glow" />
           <h1 className="text-3xl font-bold text-foreground">സംരംഭക.com</h1>
-          <p className="text-muted-foreground mt-2">Reset your password</p>
+          <p className="text-muted-foreground mt-2">Reset Your Password</p>
         </div>
 
         <Card className="shadow-medium border-0">

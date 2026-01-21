@@ -6,11 +6,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Generate a 6-digit OTP
-function generateOTP(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
 // Simple password hashing using Web Crypto API
 async function hashPassword(password: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -40,10 +35,10 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { action, mobile_number, otp, new_password } = await req.json();
+    const { action, mobile_number, date_of_birth, new_password } = await req.json();
 
-    if (action === "request_otp") {
-      // Validate mobile number
+    if (action === "verify_identity") {
+      // Validate inputs
       if (!mobile_number || !/^[0-9]{10}$/.test(mobile_number)) {
         return new Response(
           JSON.stringify({ error: "Please enter a valid 10-digit mobile number" }),
@@ -51,100 +46,78 @@ serve(async (req) => {
         );
       }
 
-      // Check if mobile number exists
-      const { data: existingUser } = await supabase
-        .from("user_credentials")
-        .select("id")
+      if (!date_of_birth) {
+        return new Response(
+          JSON.stringify({ error: "Date of birth is required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`Verifying identity for mobile: ${mobile_number}, dob: ${date_of_birth}`);
+
+      // Check if mobile number exists and get the user profile
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("id, date_of_birth, mobile_number")
         .eq("mobile_number", mobile_number)
         .maybeSingle();
 
-      if (!existingUser) {
+      if (profileError) {
+        console.error("Profile lookup error:", profileError);
+        return new Response(
+          JSON.stringify({ error: "Failed to verify identity" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (!profile) {
+        console.log("No account found with mobile:", mobile_number);
         return new Response(
           JSON.stringify({ error: "No account found with this mobile number" }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // Delete any existing OTPs for this mobile number
-      await supabase
-        .from("password_reset_otps")
-        .delete()
-        .eq("mobile_number", mobile_number);
-
-      // Generate and store OTP
-      const otpCode = generateOTP();
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
-
-      const { error: otpError } = await supabase
-        .from("password_reset_otps")
-        .insert({
-          mobile_number,
-          otp_code: otpCode,
-          expires_at: expiresAt,
-        });
-
-      if (otpError) {
-        console.error("OTP creation error:", otpError);
+      // Check if profile has date_of_birth
+      if (!profile.date_of_birth) {
+        console.log("User does not have date of birth set:", profile.id);
         return new Response(
-          JSON.stringify({ error: "Failed to generate OTP" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      // TODO: Integrate with SMS service (Twilio, MSG91, etc.) to send OTP
-      // For now, we'll log it for testing purposes
-      console.log(`OTP for ${mobile_number}: ${otpCode}`);
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          message: "OTP sent successfully",
-          // In production, remove this - only for testing
-          debug_otp: otpCode,
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    else if (action === "verify_otp") {
-      if (!mobile_number || !otp) {
-        return new Response(
-          JSON.stringify({ error: "Mobile number and OTP are required" }),
+          JSON.stringify({ error: "Password reset is not available. Please contact support." }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // Find valid OTP
-      const { data: otpRecord } = await supabase
-        .from("password_reset_otps")
-        .select("*")
-        .eq("mobile_number", mobile_number)
-        .eq("otp_code", otp)
-        .eq("is_used", false)
-        .gte("expires_at", new Date().toISOString())
-        .maybeSingle();
+      // Compare dates (normalize both to YYYY-MM-DD format)
+      const storedDOB = profile.date_of_birth.split('T')[0]; // Handle if it's a datetime
+      const providedDOB = date_of_birth.split('T')[0];
 
-      if (!otpRecord) {
+      console.log(`Comparing DOB - stored: ${storedDOB}, provided: ${providedDOB}`);
+
+      if (storedDOB !== providedDOB) {
+        console.log("DOB mismatch for user:", profile.id);
         return new Response(
-          JSON.stringify({ error: "Invalid or expired OTP" }),
+          JSON.stringify({ error: "Mobile number and date of birth do not match our records" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
+      console.log("Identity verified successfully for user:", profile.id);
+
       return new Response(
         JSON.stringify({
           success: true,
-          message: "OTP verified successfully",
+          message: "Identity verified successfully",
           verified: true,
+          user_id: profile.id,
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     else if (action === "reset_password") {
-      if (!mobile_number || !otp || !new_password) {
+      if (!mobile_number || !date_of_birth || !new_password) {
         return new Response(
-          JSON.stringify({ error: "Mobile number, OTP, and new password are required" }),
+          JSON.stringify({ error: "Mobile number, date of birth, and new password are required" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -156,19 +129,28 @@ serve(async (req) => {
         );
       }
 
-      // Verify OTP again
-      const { data: otpRecord } = await supabase
-        .from("password_reset_otps")
-        .select("*")
+      console.log(`Resetting password for mobile: ${mobile_number}`);
+
+      // Verify identity again before resetting
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id, date_of_birth, mobile_number")
         .eq("mobile_number", mobile_number)
-        .eq("otp_code", otp)
-        .eq("is_used", false)
-        .gte("expires_at", new Date().toISOString())
         .maybeSingle();
 
-      if (!otpRecord) {
+      if (!profile || !profile.date_of_birth) {
         return new Response(
-          JSON.stringify({ error: "Invalid or expired OTP. Please request a new one." }),
+          JSON.stringify({ error: "Identity verification failed" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const storedDOB = profile.date_of_birth.split('T')[0];
+      const providedDOB = date_of_birth.split('T')[0];
+
+      if (storedDOB !== providedDOB) {
+        return new Response(
+          JSON.stringify({ error: "Identity verification failed" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -176,7 +158,7 @@ serve(async (req) => {
       // Hash new password
       const passwordHash = await hashPassword(new_password);
 
-      // Update password
+      // Update password in user_credentials
       const { error: updateError } = await supabase
         .from("user_credentials")
         .update({ password_hash: passwordHash, updated_at: new Date().toISOString() })
@@ -190,25 +172,13 @@ serve(async (req) => {
         );
       }
 
-      // Mark OTP as used
-      await supabase
-        .from("password_reset_otps")
-        .update({ is_used: true })
-        .eq("id", otpRecord.id);
-
       // Invalidate all sessions for this user
-      const { data: credentials } = await supabase
-        .from("user_credentials")
-        .select("id")
-        .eq("mobile_number", mobile_number)
-        .single();
+      await supabase
+        .from("user_sessions")
+        .update({ is_active: false })
+        .eq("user_id", profile.id);
 
-      if (credentials) {
-        await supabase
-          .from("user_sessions")
-          .update({ is_active: false })
-          .eq("user_id", credentials.id);
-      }
+      console.log("Password reset successfully for user:", profile.id);
 
       return new Response(
         JSON.stringify({
