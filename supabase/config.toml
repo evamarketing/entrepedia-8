@@ -1,7 +1,1 @@
 project_id = "fcrdwjukkchdibmpyjkg"
-
-[functions.manage-community]
-verify_jwt = false
-
-[functions.manage-business-follow]
-verify_jwt = false
