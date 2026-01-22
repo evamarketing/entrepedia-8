@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useSessionRefresh } from '@/hooks/useSessionRefresh';
 
@@ -45,9 +45,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const STORAGE_KEY = 'samrambhak_auth';
 
 // Separate component that handles session refresh - must be inside AuthProvider
-function SessionRefreshManager() {
+function SessionRefreshManager({ onSessionExpired, onSessionRestored }: { 
+  onSessionExpired: () => void;
+  onSessionRestored: (user: User) => void;
+}) {
   const { user } = useAuth();
-  useSessionRefresh(!!user);
+  useSessionRefresh(!!user, onSessionExpired, onSessionRestored);
   return null;
 }
 
@@ -217,6 +220,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profile?.location
   );
 
+  // Handle session expiration
+  const handleSessionExpired = useCallback(() => {
+    setUser(null);
+    setProfile(null);
+  }, []);
+
+  // Handle session restoration
+  const handleSessionRestored = useCallback(async (restoredUser: User) => {
+    setUser(restoredUser);
+    await fetchProfile(restoredUser.id);
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -230,7 +245,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshProfile,
       }}
     >
-      <SessionRefreshManager />
+      <SessionRefreshManager 
+        onSessionExpired={handleSessionExpired} 
+        onSessionRestored={handleSessionRestored} 
+      />
       {children}
     </AuthContext.Provider>
   );

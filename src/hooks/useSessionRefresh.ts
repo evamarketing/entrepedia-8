@@ -2,8 +2,9 @@ import { useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 const STORAGE_KEY = 'samrambhak_auth';
-const REFRESH_INTERVAL = 1000 * 60 * 60; // Refresh every hour
-const MIN_ACTIVITY_INTERVAL = 1000 * 60 * 5; // Minimum 5 minutes between refreshes
+const REFRESH_INTERVAL = 1000 * 60 * 30; // Refresh every 30 minutes (more frequent)
+const MIN_ACTIVITY_INTERVAL = 1000 * 60 * 2; // Minimum 2 minutes between refreshes
+const SESSION_CHECK_INTERVAL = 1000 * 60 * 5; // Check session validity every 5 minutes
 
 function getSessionToken(): string | null {
   try {
@@ -18,9 +19,26 @@ function getSessionToken(): string | null {
   return null;
 }
 
-export function useSessionRefresh(isAuthenticated: boolean) {
+function getStoredAuth(): { user: any; session_token: string } | null {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+export function useSessionRefresh(
+  isAuthenticated: boolean,
+  onSessionExpired?: () => void,
+  onSessionRestored?: (user: any) => void
+) {
   const lastRefreshRef = useRef<number>(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const refreshSession = useCallback(async () => {
     const sessionToken = getSessionToken();
@@ -55,12 +73,48 @@ export function useSessionRefresh(isAuthenticated: boolean) {
     }
   }, []);
 
+  // Validate session and attempt auto-restore
+  const validateAndRestoreSession = useCallback(async () => {
+    const storedAuth = getStoredAuth();
+    if (!storedAuth?.session_token) return;
+
+    try {
+      const { data: validatedUserId, error } = await supabase.rpc('validate_session', {
+        p_session_token: storedAuth.session_token,
+      });
+
+      if (error || !validatedUserId) {
+        console.warn('Session expired, attempting to refresh...');
+        
+        // Try to refresh the session first
+        const refreshed = await refreshSession();
+        
+        if (!refreshed) {
+          console.warn('Session refresh failed, clearing session');
+          localStorage.removeItem(STORAGE_KEY);
+          onSessionExpired?.();
+        }
+      } else {
+        // Session is valid, restore if needed
+        if (!isAuthenticated && onSessionRestored) {
+          onSessionRestored({ ...storedAuth.user, id: String(validatedUserId) });
+        }
+      }
+    } catch (err) {
+      console.error('Session validation failed:', err);
+    }
+  }, [isAuthenticated, refreshSession, onSessionExpired, onSessionRestored]);
+
   // Periodic refresh
   useEffect(() => {
     if (!isAuthenticated) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
+      }
+      if (checkIntervalRef.current) {
+        clearInterval(checkIntervalRef.current);
+        checkIntervalRef.current = null;
       }
       return;
     }
@@ -70,14 +124,21 @@ export function useSessionRefresh(isAuthenticated: boolean) {
 
     // Set up periodic refresh
     intervalRef.current = setInterval(refreshSession, REFRESH_INTERVAL);
+    
+    // Set up session validity check
+    checkIntervalRef.current = setInterval(validateAndRestoreSession, SESSION_CHECK_INTERVAL);
 
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
+      if (checkIntervalRef.current) {
+        clearInterval(checkIntervalRef.current);
+        checkIntervalRef.current = null;
+      }
     };
-  }, [isAuthenticated, refreshSession]);
+  }, [isAuthenticated, refreshSession, validateAndRestoreSession]);
 
   // Refresh on user activity (throttled)
   useEffect(() => {
@@ -103,5 +164,39 @@ export function useSessionRefresh(isAuthenticated: boolean) {
     };
   }, [isAuthenticated, refreshSession]);
 
-  return { refreshSession };
+  // Handle visibility change - refresh when tab becomes visible
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // User came back to the tab, validate and refresh session
+        validateAndRestoreSession();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isAuthenticated, validateAndRestoreSession]);
+
+  // Handle online/offline status
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const handleOnline = () => {
+      // When coming back online, validate session
+      validateAndRestoreSession();
+    };
+
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [isAuthenticated, validateAndRestoreSession]);
+
+  return { refreshSession, validateAndRestoreSession };
 }
