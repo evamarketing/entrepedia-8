@@ -117,12 +117,57 @@ export default function AdminPosts() {
 
   const deleteMutation = useMutation({
     mutationFn: async (postId: string) => {
-      const { error } = await supabase
+      console.log('Attempting to delete post:', postId);
+      console.log('Current user:', currentUser?.id);
+      
+      // First, delete related records (comments and likes)
+      const { error: likesError } = await supabase
+        .from('post_likes')
+        .delete()
+        .eq('post_id', postId);
+      
+      if (likesError) {
+        console.error('Error deleting post likes:', likesError);
+      }
+
+      const { error: commentsError } = await supabase
+        .from('comments')
+        .delete()
+        .eq('post_id', postId);
+      
+      if (commentsError) {
+        console.error('Error deleting post comments:', commentsError);
+      }
+
+      // Delete reports related to this post
+      const { error: reportsError } = await supabase
+        .from('reports')
+        .delete()
+        .eq('reported_id', postId)
+        .eq('reported_type', 'post');
+      
+      if (reportsError) {
+        console.error('Error deleting post reports:', reportsError);
+      }
+
+      // Now delete the post
+      const { data, error, count } = await supabase
         .from('posts')
         .delete()
-        .eq('id', postId);
+        .eq('id', postId)
+        .select();
 
-      if (error) throw error;
+      console.log('Delete result:', { data, error, count });
+
+      if (error) {
+        console.error('Error deleting post:', error);
+        throw error;
+      }
+
+      if (!data || data.length === 0) {
+        console.error('Post deletion returned no data - RLS may have blocked the delete');
+        throw new Error('Unable to delete post. You may not have permission.');
+      }
 
       await supabase.from('admin_activity_logs').insert({
         admin_id: currentUser?.id,
@@ -140,6 +185,7 @@ export default function AdminPosts() {
       setActionReason('');
     },
     onError: (error) => {
+      console.error('Delete mutation error:', error);
       toast.error('Failed to delete post: ' + error.message);
     },
   });
